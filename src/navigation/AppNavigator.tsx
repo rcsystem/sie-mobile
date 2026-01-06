@@ -36,9 +36,9 @@ export default function AppNavigator() {
           />
         ) : (
           <Stack.Screen
-            name="Home"
-            component={HomeScreen}
-            options={{ title: "Walworth" }}
+            name="Main"
+            component={MainTabs}
+            options={{ headerShown: false }}
           />
         )}
       </Stack.Navigator>
