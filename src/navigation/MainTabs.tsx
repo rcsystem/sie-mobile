@@ -10,12 +10,14 @@ export default function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerTitleAlign: "center",
+        headerTitleAlign: "left",
         tabBarIcon: ({ focused, size, color }) => {
           let iconName: any = "home-outline";
 
-          if (route.name === "Inicio") iconName = focused ? "home" : "home-outline";
-          if (route.name === "Permisos") iconName = focused ? "document-text" : "document-text-outline";
+          if (route.name === "Inicio")
+            iconName = focused ? "home" : "home-outline";
+          if (route.name === "Permisos")
+            iconName = focused ? "document-text" : "document-text-outline";
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },

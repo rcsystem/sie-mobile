@@ -3,7 +3,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "../screens/LoginScreen";
 import HomeScreen from "../screens/HomeScreen";
 import { useAuth } from "../store/useAuth";
-import { MainTabs } from "./MainTabs";
+import MainTabs from "./MainTabs";
 import { useEffect } from "react";
 import { ActivityIndicator, View, Text } from "react-native";
 
