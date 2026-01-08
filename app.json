@@ -29,6 +29,10 @@
     "plugins": [
       "expo-secure-store",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "androidStatusBar": {
+      "backgroundColor": "#a10606",
+      "barStyle": "light-content"
+    }
   }
 }

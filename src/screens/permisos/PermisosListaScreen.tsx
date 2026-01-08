@@ -58,13 +58,11 @@ function textoFechas(item: any): string {
   }
 
   if (mov === "ENTRADA") {
-    return `Entrada: ${item?.fecha_entrada ?? "-"} → ${
-      item?.hora_entrada ?? "-"
-    }`;
+    return `${item?.fecha_entrada ?? "-"} → ${item?.hora_entrada ?? "-"}`;
   }
 
   if (mov === "SALIDA") {
-    return `Salida: ${item?.fecha_salida ?? "-"} → ${item?.hora_salida ?? "-"}`;
+    return `${item?.fecha_salida ?? "-"} → ${item?.hora_salida ?? "-"}`;
   }
 
   if (mov === "ENTRADA_SALIDA") {
@@ -196,11 +194,11 @@ export default function PermisosListaScreen({ navigation }: any) {
               )}
 
               {/* Fechas correctas según movimiento */}
-              <Text style={{ fontSize: 12, color: "#777", marginTop: 8 }}>
+              <Text style={{ fontSize: 12, color: "#0e0e0eff", marginTop: 8 }}>
                 {fechas}
               </Text>
 
-              <Text style={{ fontSize: 11, color: "#999", marginTop: 6 }}>
+              <Text style={{ fontSize: 12, color: "#999", marginTop: 6 }}>
                 ID: {item.id_es}
               </Text>
             </View>

@@ -1,9 +1,12 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { StatusBar } from "expo-status-bar";
+
 import LoginScreen from "../screens/LoginScreen";
-import HomeScreen from "../screens/HomeScreen";
-import { useAuth } from "../store/useAuth";
 import MainTabs from "./MainTabs";
+import PermisoCrearScreen from "../screens/permisos/PermisoCrearScreen";
+
+import { useAuth } from "../store/useAuth";
 import { useEffect } from "react";
 import { ActivityIndicator, View, Text } from "react-native";
 
@@ -27,7 +30,16 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator>
+      <StatusBar style="light" backgroundColor="#a10606" />
+
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: { backgroundColor: "#a10606" },
+          headerTintColor: "#fff",
+          headerTitleStyle: { fontWeight: "700" },
+          headerShadowVisible: false,
+        }}
+      >
         {!usuario ? (
           <Stack.Screen
             name="Login"
@@ -35,11 +47,21 @@ export default function AppNavigator() {
             options={{ headerShown: false }}
           />
         ) : (
-          <Stack.Screen
-            name="Main"
-            component={MainTabs}
-            options={{ headerShown: false }}
-          />
+          <>
+            {/* Aquí normalmente va tu app principal */}
+            <Stack.Screen
+              name="Main"
+              component={MainTabs}
+              options={{ headerShown: false }} // tabs suelen manejar su propio header
+            />
+
+            {/* Pantallas extra encima de tabs */}
+            <Stack.Screen
+              name="PermisoCrear"
+              component={PermisoCrearScreen}
+              options={{ title: "Nuevo Permiso" }}
+            />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

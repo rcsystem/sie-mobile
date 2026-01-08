@@ -7,8 +7,8 @@ export default function HomeScreen() {
   return (
     <View style={{ flex: 1, padding: 24 }}>
       <Text style={{ fontSize: 18, fontWeight: "700" }}>Bienvenido</Text>
-      <Text style={{ marginTop: 8 }}>
-        {usuario?.nombre ?? usuario?.email ?? "Usuario"}
+      <Text style={{ fontSize: 18, marginTop: 10 }}>
+        {usuario?.name ?? "Usuario"} {usuario?.surname ?? ""}
       </Text>
 
       <TouchableOpacity

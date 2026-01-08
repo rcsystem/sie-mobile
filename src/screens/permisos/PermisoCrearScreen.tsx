@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -6,64 +6,88 @@ import {
   TouchableOpacity,
   Platform,
   ScrollView,
+  KeyboardAvoidingView,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import { clienteApi } from "../../api/cliente";
 
+type TipoPermiso = 1 | 2 | 4 | 6 | 7 | 8;
+
 type Movimiento = "ENTRADA" | "SALIDA" | "ENTRADA_SALIDA" | "INASISTENCIA";
 
-type CategoriaPermiso = {
-  id: number;
-  nombre: string;
-};
+type Turno = { id: number; nombre: string };
 
-function formatearFechaYmd(d: Date) {
+// ---- helpers ----
+function ymd(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-
-function formatearHoraHi(d: Date) {
+function hi(d: Date) {
   const h = String(d.getHours()).padStart(2, "0");
   const m = String(d.getMinutes()).padStart(2, "0");
   return `${h}:${m}:00`;
 }
+function rangoFechasYmd(del: Date, al: Date) {
+  const res: string[] = [];
+  const cur = new Date(del);
+  cur.setHours(0, 0, 0, 0);
+  const end = new Date(al);
+  end.setHours(0, 0, 0, 0);
+
+  while (cur <= end) {
+    res.push(ymd(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return res.join(", "); // <- igual que web (explode(', '))
+}
 
 export default function PermisoCrearScreen({ navigation }: any) {
-  // ✅ Catálogo (idealmente vendrá de API, por ahora ejemplo)
-  const categorias: CategoriaPermiso[] = useMemo(
+  const scrollRef = useRef<ScrollView>(null);
+
+  // Catálogo de tipos (igual que backend)
+  const tipos = useMemo(
     () => [
-      { id: 2, nombre: "PERSONAL" },
-      { id: 1, nombre: "LABORAL" },
+      { id: 1 as TipoPermiso, nombre: "LABORAL" },
+      { id: 2 as TipoPermiso, nombre: "PERSONAL" },
+      { id: 4 as TipoPermiso, nombre: "DÍA ESPECIAL" }, // el backend real pone el motive del día
+      { id: 6 as TipoPermiso, nombre: "POR TRAFICO" },
+      { id: 7 as TipoPermiso, nombre: "DIA DE LA MUJER" },
+      { id: 8 as TipoPermiso, nombre: "ATENCIÓN PSICOLÓGICA" },
     ],
     []
   );
 
-  const [categoriaId, setCategoriaId] = useState<number>(
-    categorias[0]?.id ?? 1
+  // Turnos (ideal: traerlos de API /api/turnos)
+  const turnos: Turno[] = useMemo(
+    () => [
+      { id: 1, nombre: "Turno 1" },
+      { id: 2, nombre: "Turno 2" },
+      { id: 3, nombre: "Turno 3" },
+    ],
+    []
   );
-  const categoriaNombre = useMemo(
-    () => categorias.find((c) => c.id === categoriaId)?.nombre ?? "PERSONAL",
-    [categorias, categoriaId]
-  );
+
+  const [tipoPermiso, setTipoPermiso] = useState<TipoPermiso>(2);
+  const [turnoId, setTurnoId] = useState<number>(0);
 
   const [movimiento, setMovimiento] = useState<Movimiento>("SALIDA");
-  const [goceSueldo, setGoceSueldo] = useState<"SI" | "NO">("NO");
+  const [goceSueldo, setGoceSueldo] = useState<"SI" | "NO">("SI");
   const [observaciones, setObservaciones] = useState("");
 
-  // Campos para Entrada/Salida
-  const [fechaEntrada, setFechaEntrada] = useState<Date>(new Date());
-  const [horaEntrada, setHoraEntrada] = useState<Date>(new Date());
-  const [fechaSalida, setFechaSalida] = useState<Date>(new Date());
-  const [horaSalida, setHoraSalida] = useState<Date>(new Date());
+  // Entrada/Salida
+  const [fechaEntrada, setFechaEntrada] = useState(new Date());
+  const [horaEntrada, setHoraEntrada] = useState(new Date());
+  const [fechaSalida, setFechaSalida] = useState(new Date());
+  const [horaSalida, setHoraSalida] = useState(new Date());
 
-  // Campos para Inasistencia
-  const [inasistenciaDel, setInasistenciaDel] = useState<Date>(new Date());
-  const [inasistenciaAl, setInasistenciaAl] = useState<Date>(new Date());
+  // Inasistencia (Del/Al -> genera lista)
+  const [inasDel, setInasDel] = useState(new Date());
+  const [inasAl, setInasAl] = useState(new Date());
 
-  // Pickers visibles
+  // Picker
   const [picker, setPicker] = useState<{
     tipo:
       | "fechaEntrada"
@@ -80,30 +104,29 @@ export default function PermisoCrearScreen({ navigation }: any) {
   const [error, setError] = useState<string | null>(null);
 
   function validar(): string | null {
-    if (!observaciones.trim()) return "Agrega observaciones (motivo).";
+    if (!turnoId) return "Selecciona el turno.";
 
+    const obs = observaciones.trim();
+    if (!obs) return "Agrega observaciones (motivo).";
+
+    // En web: laboral exige más detalle
+    if (tipoPermiso === 1 && obs.length < 30) {
+      return "En LABORAL, el motivo debe ser más descriptivo (mínimo 30 caracteres).";
+    }
+
+    // Movimiento
     if (movimiento === "INASISTENCIA") {
-      if (!inasistenciaDel || !inasistenciaAl) return "Selecciona Del y Al.";
-      if (inasistenciaAl < inasistenciaDel)
+      if (!inasDel || !inasAl) return "Selecciona Del y Al.";
+      if (inasAl < inasDel)
         return "La fecha 'Al' no puede ser menor que 'Del'.";
       return null;
     }
 
-    if (movimiento === "ENTRADA") {
-      if (!fechaEntrada || !horaEntrada)
-        return "Selecciona fecha y hora de entrada.";
-      return null;
-    }
-
-    if (movimiento === "SALIDA") {
-      if (!fechaSalida || !horaSalida)
-        return "Selecciona fecha y hora de salida.";
-      return null;
-    }
+    if (movimiento === "ENTRADA") return null;
+    if (movimiento === "SALIDA") return null;
 
     if (movimiento === "ENTRADA_SALIDA") {
-      if (!fechaEntrada || !horaEntrada || !fechaSalida || !horaSalida)
-        return "Selecciona fecha/hora de entrada y salida.";
+      // opcional: validar que entrada/salida tengan coherencia de día/hora
       return null;
     }
 
@@ -121,40 +144,68 @@ export default function PermisoCrearScreen({ navigation }: any) {
     setError(null);
 
     try {
-      // ✅ Payload alineado a tu tabla SQL
+      // Payload estilo "web" (lo que tu backend generateNew lee)
       const payload: any = {
-        id_tipo_permiso: categoriaId,
-        tipo_permiso: categoriaNombre,
+        tipo_permiso: tipoPermiso,
+        turno: turnoId,
         goce_sueldo: goceSueldo,
-        observaciones: observaciones.trim(),
+        permiso_observaciones: observaciones.trim(),
       };
 
+      // Movimiento -> campos
       if (movimiento === "INASISTENCIA") {
-        payload.inasistencia_del = formatearFechaYmd(inasistenciaDel);
-        payload.inasistencia_al = formatearFechaYmd(inasistenciaAl);
+        payload.permiso_inasistencia = rangoFechasYmd(inasDel, inasAl);
+        payload.permiso_autoriza_entrada = "";
+        payload.permiso_dia_entrada = "";
+        payload.permiso_autoriza_salida = "";
+        payload.permiso_dia_salida = "";
       }
 
       if (movimiento === "ENTRADA") {
-        payload.fecha_entrada = formatearFechaYmd(fechaEntrada);
-        payload.hora_entrada = formatearHoraHi(horaEntrada);
+        payload.permiso_autoriza_entrada = hi(horaEntrada);
+        payload.permiso_dia_entrada = (() => {
+          // backend espera d/m/Y en web. Si tu API ya lo cambió a Y-m-d, dime y lo ajusto.
+          const d = fechaEntrada;
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yy = d.getFullYear();
+          return `${dd}/${mm}/${yy}`;
+        })();
       }
 
       if (movimiento === "SALIDA") {
-        payload.fecha_salida = formatearFechaYmd(fechaSalida);
-        payload.hora_salida = formatearHoraHi(horaSalida);
+        payload.permiso_autoriza_salida = hi(horaSalida);
+        payload.permiso_dia_salida = (() => {
+          const d = fechaSalida;
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yy = d.getFullYear();
+          return `${dd}/${mm}/${yy}`;
+        })();
       }
 
       if (movimiento === "ENTRADA_SALIDA") {
-        payload.fecha_entrada = formatearFechaYmd(fechaEntrada);
-        payload.hora_entrada = formatearHoraHi(horaEntrada);
-        payload.fecha_salida = formatearFechaYmd(fechaSalida);
-        payload.hora_salida = formatearHoraHi(horaSalida);
+        payload.permiso_autoriza_entrada = hi(horaEntrada);
+        payload.permiso_dia_entrada = (() => {
+          const d = fechaEntrada;
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yy = d.getFullYear();
+          return `${dd}/${mm}/${yy}`;
+        })();
+
+        payload.permiso_autoriza_salida = hi(horaSalida);
+        payload.permiso_dia_salida = (() => {
+          const d = fechaSalida;
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yy = d.getFullYear();
+          return `${dd}/${mm}/${yy}`;
+        })();
       }
 
-      // POST a tu endpoint protegido
-      await clienteApi.post("/permisos", payload);
+      await clienteApi.post("/api/permisos", payload);
 
-      // ✅ regresa al listado y refresca (si manejas refresh al volver)
       navigation.goBack();
     } catch (e: any) {
       setError(e?.response?.data?.message || "No se pudo crear el permiso");
@@ -167,7 +218,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
     setPicker({ tipo, mode });
   const cerrarPicker = () => setPicker({ tipo: null });
 
-  const onChangePicker = (event: any, selected?: Date) => {
+  const onChangePicker = (_event: any, selected?: Date) => {
     if (Platform.OS !== "ios") cerrarPicker();
     if (!selected) return;
 
@@ -185,231 +236,277 @@ export default function PermisoCrearScreen({ navigation }: any) {
         setHoraSalida(selected);
         break;
       case "inasDel":
-        setInasistenciaDel(selected);
+        setInasDel(selected);
         break;
       case "inasAl":
-        setInasistenciaAl(selected);
+        setInasAl(selected);
         break;
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-      <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 12 }}>
-        Crear Permiso
-      </Text>
-
-      {/* Categoría */}
-      <Text style={{ fontWeight: "700", marginBottom: 6 }}>Categoría</Text>
-      <View
-        style={{
-          borderWidth: 1,
-          borderColor: "#ddd",
-          borderRadius: 10,
-          marginBottom: 12,
-        }}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+    >
+      <ScrollView
+        ref={scrollRef}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
       >
-        <Picker
-          selectedValue={categoriaId}
-          onValueChange={(v) => setCategoriaId(Number(v))}
-        >
-          {categorias.map((c) => (
-            <Picker.Item key={c.id} label={c.nombre} value={c.id} />
-          ))}
-        </Picker>
-      </View>
-
-      {/* Movimiento */}
-      <Text style={{ fontWeight: "700", marginBottom: 6 }}>Movimiento</Text>
-      <View
-        style={{
-          borderWidth: 1,
-          borderColor: "#ddd",
-          borderRadius: 10,
-          marginBottom: 12,
-        }}
-      >
-        <Picker
-          selectedValue={movimiento}
-          onValueChange={(v) => setMovimiento(v)}
-        >
-          <Picker.Item label="Entrada" value="ENTRADA" />
-          <Picker.Item label="Salida" value="SALIDA" />
-          <Picker.Item label="Entrada → Salida" value="ENTRADA_SALIDA" />
-          <Picker.Item label="Inasistencia (Del → Al)" value="INASISTENCIA" />
-        </Picker>
-      </View>
-
-      {/* Goce de sueldo */}
-      <Text style={{ fontWeight: "700", marginBottom: 6 }}>Goce de sueldo</Text>
-      <View
-        style={{
-          borderWidth: 1,
-          borderColor: "#ddd",
-          borderRadius: 10,
-          marginBottom: 12,
-        }}
-      >
-        <Picker
-          selectedValue={goceSueldo}
-          onValueChange={(v) => setGoceSueldo(v)}
-        >
-          <Picker.Item label="NO" value="NO" />
-          <Picker.Item label="SI" value="SI" />
-        </Picker>
-      </View>
-
-      {/* Campos dinámicos */}
-      {movimiento === "INASISTENCIA" ? (
-        <View style={{ gap: 10, marginBottom: 12 }}>
-          <Text style={{ fontWeight: "700" }}>Rango de inasistencia</Text>
-
-          <TouchableOpacity
-            onPress={() => mostrarPicker("inasDel", "date")}
-            style={{
-              padding: 14,
-              borderWidth: 1,
-              borderColor: "#ddd",
-              borderRadius: 10,
-            }}
-          >
-            <Text>Del: {formatearFechaYmd(inasistenciaDel)}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => mostrarPicker("inasAl", "date")}
-            style={{
-              padding: 14,
-              borderWidth: 1,
-              borderColor: "#ddd",
-              borderRadius: 10,
-            }}
-          >
-            <Text>Al: {formatearFechaYmd(inasistenciaAl)}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={{ gap: 10, marginBottom: 12 }}>
-          {(movimiento === "ENTRADA" || movimiento === "ENTRADA_SALIDA") && (
-            <>
-              <Text style={{ fontWeight: "700" }}>Entrada</Text>
-              <TouchableOpacity
-                onPress={() => mostrarPicker("fechaEntrada", "date")}
-                style={{
-                  padding: 14,
-                  borderWidth: 1,
-                  borderColor: "#ddd",
-                  borderRadius: 10,
-                }}
-              >
-                <Text>Fecha entrada: {formatearFechaYmd(fechaEntrada)}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => mostrarPicker("horaEntrada", "time")}
-                style={{
-                  padding: 14,
-                  borderWidth: 1,
-                  borderColor: "#ddd",
-                  borderRadius: 10,
-                }}
-              >
-                <Text>Hora entrada: {formatearHoraHi(horaEntrada)}</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {(movimiento === "SALIDA" || movimiento === "ENTRADA_SALIDA") && (
-            <>
-              <Text style={{ fontWeight: "700" }}>Salida</Text>
-              <TouchableOpacity
-                onPress={() => mostrarPicker("fechaSalida", "date")}
-                style={{
-                  padding: 14,
-                  borderWidth: 1,
-                  borderColor: "#ddd",
-                  borderRadius: 10,
-                }}
-              >
-                <Text>Fecha salida: {formatearFechaYmd(fechaSalida)}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => mostrarPicker("horaSalida", "time")}
-                style={{
-                  padding: 14,
-                  borderWidth: 1,
-                  borderColor: "#ddd",
-                  borderRadius: 10,
-                }}
-              >
-                <Text>Hora salida: {formatearHoraHi(horaSalida)}</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      )}
-
-      {/* Observaciones */}
-      <Text style={{ fontWeight: "700", marginBottom: 6 }}>Observaciones</Text>
-      <TextInput
-        value={observaciones}
-        onChangeText={setObservaciones}
-        multiline
-        placeholder="Describe el motivo…"
-        style={{
-          borderWidth: 1,
-          borderColor: "#ddd",
-          borderRadius: 10,
-          padding: 12,
-          minHeight: 90,
-          textAlignVertical: "top",
-        }}
-      />
-
-      {error ? (
-        <Text style={{ color: "#a10606", marginTop: 10 }}>{error}</Text>
-      ) : null}
-
-      <TouchableOpacity
-        disabled={cargando}
-        onPress={enviar}
-        style={{
-          marginTop: 16,
-          padding: 14,
-          borderRadius: 10,
-          alignItems: "center",
-          backgroundColor: "#a10606",
-          opacity: cargando ? 0.7 : 1,
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "700" }}>
-          {cargando ? "Guardando..." : "Crear Permiso"}
+        <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 12 }}>
+          Crear Permiso
         </Text>
-      </TouchableOpacity>
 
-      {/* DateTimePicker */}
-      {picker.tipo && (
-        <DateTimePicker
-          value={
-            picker.tipo === "fechaEntrada"
-              ? fechaEntrada
-              : picker.tipo === "horaEntrada"
-              ? horaEntrada
-              : picker.tipo === "fechaSalida"
-              ? fechaSalida
-              : picker.tipo === "horaSalida"
-              ? horaSalida
-              : picker.tipo === "inasDel"
-              ? inasistenciaDel
-              : inasistenciaAl
+        {/* Tipo permiso */}
+        <Text style={{ fontWeight: "700", marginBottom: 6 }}>
+          Tipo de permiso
+        </Text>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#ddd",
+            borderRadius: 10,
+            marginBottom: 12,
+          }}
+        >
+          <Picker
+            selectedValue={tipoPermiso}
+            onValueChange={(v) => setTipoPermiso(Number(v) as TipoPermiso)}
+          >
+            {tipos.map((t) => (
+              <Picker.Item key={t.id} label={t.nombre} value={t.id} />
+            ))}
+          </Picker>
+        </View>
+
+        {/* Turno */}
+        <Text style={{ fontWeight: "700", marginBottom: 6 }}>Turno</Text>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#ddd",
+            borderRadius: 10,
+            marginBottom: 12,
+          }}
+        >
+          <Picker
+            selectedValue={turnoId}
+            onValueChange={(v) => setTurnoId(Number(v))}
+          >
+            <Picker.Item label="Selecciona..." value={0} />
+            {turnos.map((t) => (
+              <Picker.Item key={t.id} label={t.nombre} value={t.id} />
+            ))}
+          </Picker>
+        </View>
+
+        {/* Movimiento */}
+        <Text style={{ fontWeight: "700", marginBottom: 6 }}>Movimiento</Text>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#ddd",
+            borderRadius: 10,
+            marginBottom: 12,
+          }}
+        >
+          <Picker
+            selectedValue={movimiento}
+            onValueChange={(v) => setMovimiento(v)}
+          >
+            <Picker.Item label="Entrada" value="ENTRADA" />
+            <Picker.Item label="Salida" value="SALIDA" />
+            <Picker.Item label="Entrada → Salida" value="ENTRADA_SALIDA" />
+            <Picker.Item label="Inasistencia (Del → Al)" value="INASISTENCIA" />
+          </Picker>
+        </View>
+
+        {/* Goce sueldo */}
+        <Text style={{ fontWeight: "700", marginBottom: 6 }}>
+          Goce de sueldo
+        </Text>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#ddd",
+            borderRadius: 10,
+            marginBottom: 12,
+          }}
+        >
+          <Picker
+            selectedValue={goceSueldo}
+            onValueChange={(v) => setGoceSueldo(v)}
+          >
+            <Picker.Item label="SI" value="SI" />
+            <Picker.Item label="NO" value="NO" />
+          </Picker>
+        </View>
+
+        {/* Campos dinámicos */}
+        {movimiento === "INASISTENCIA" ? (
+          <View style={{ gap: 10, marginBottom: 12 }}>
+            <Text style={{ fontWeight: "700" }}>Rango de inasistencia</Text>
+
+            <TouchableOpacity
+              onPress={() => mostrarPicker("inasDel", "date")}
+              style={{
+                padding: 14,
+                borderWidth: 1,
+                borderColor: "#ddd",
+                borderRadius: 10,
+              }}
+            >
+              <Text>Del: {ymd(inasDel)}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => mostrarPicker("inasAl", "date")}
+              style={{
+                padding: 14,
+                borderWidth: 1,
+                borderColor: "#ddd",
+                borderRadius: 10,
+              }}
+            >
+              <Text>Al: {ymd(inasAl)}</Text>
+            </TouchableOpacity>
+
+            <Text style={{ color: "#6B7280", fontSize: 12 }}>
+              Se enviará como lista: {rangoFechasYmd(inasDel, inasAl)}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ gap: 10, marginBottom: 12 }}>
+            {(movimiento === "ENTRADA" || movimiento === "ENTRADA_SALIDA") && (
+              <>
+                <Text style={{ fontWeight: "700" }}>Entrada</Text>
+                <TouchableOpacity
+                  onPress={() => mostrarPicker("fechaEntrada", "date")}
+                  style={{
+                    padding: 14,
+                    borderWidth: 1,
+                    borderColor: "#ddd",
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text>Fecha entrada: {ymd(fechaEntrada)}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => mostrarPicker("horaEntrada", "time")}
+                  style={{
+                    padding: 14,
+                    borderWidth: 1,
+                    borderColor: "#ddd",
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text>Hora entrada: {hi(horaEntrada)}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {(movimiento === "SALIDA" || movimiento === "ENTRADA_SALIDA") && (
+              <>
+                <Text style={{ fontWeight: "700" }}>Salida</Text>
+                <TouchableOpacity
+                  onPress={() => mostrarPicker("fechaSalida", "date")}
+                  style={{
+                    padding: 14,
+                    borderWidth: 1,
+                    borderColor: "#ddd",
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text>Fecha salida: {ymd(fechaSalida)}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => mostrarPicker("horaSalida", "time")}
+                  style={{
+                    padding: 14,
+                    borderWidth: 1,
+                    borderColor: "#ddd",
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text>Hora salida: {hi(horaSalida)}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* Observaciones */}
+        <Text style={{ fontWeight: "700", marginBottom: 6 }}>
+          Motivo / Observaciones
+        </Text>
+        <TextInput
+          value={observaciones}
+          onChangeText={setObservaciones}
+          multiline
+          placeholder="Describe el motivo…"
+          onFocus={() =>
+            setTimeout(
+              () => scrollRef.current?.scrollToEnd({ animated: true }),
+              250
+            )
           }
-          mode={picker.mode}
-          is24Hour
-          display="default"
-          onChange={onChangePicker}
+          style={{
+            borderWidth: 1,
+            borderColor: "#ddd",
+            borderRadius: 10,
+            padding: 12,
+            minHeight: 120,
+            textAlignVertical: "top",
+          }}
         />
-      )}
-    </ScrollView>
+
+        {error ? (
+          <Text style={{ color: "#a10606", marginTop: 10 }}>{error}</Text>
+        ) : null}
+
+        <TouchableOpacity
+          disabled={cargando}
+          onPress={enviar}
+          style={{
+            marginTop: 16,
+            padding: 14,
+            borderRadius: 10,
+            alignItems: "center",
+            backgroundColor: "#a10606",
+            opacity: cargando ? 0.7 : 1,
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "700" }}>
+            {cargando ? "Guardando..." : "Crear Permiso"}
+          </Text>
+        </TouchableOpacity>
+
+        {picker.tipo && (
+          <DateTimePicker
+            value={
+              picker.tipo === "fechaEntrada"
+                ? fechaEntrada
+                : picker.tipo === "horaEntrada"
+                ? horaEntrada
+                : picker.tipo === "fechaSalida"
+                ? fechaSalida
+                : picker.tipo === "horaSalida"
+                ? horaSalida
+                : picker.tipo === "inasDel"
+                ? inasDel
+                : inasAl
+            }
+            mode={picker.mode}
+            is24Hour
+            display="default"
+            onChange={onChangePicker}
+          />
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
