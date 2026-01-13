@@ -21,7 +21,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.rcsystem.sieapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,6 +34,12 @@
     "androidStatusBar": {
       "backgroundColor": "#a10606",
       "barStyle": "light-content"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "68a9ebe6-5f42-45b1-a100-175074390866"
+      }
+    },
+    "owner": "rcsystem"
   }
 }

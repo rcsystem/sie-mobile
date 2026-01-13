@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { loginApi, meApi } from "../api/auth";
+import { registrarPushTokenEnApi } from "../push/registroPush";
 
 type EstadoAuth = {
   usuario: any | null;
@@ -8,7 +9,10 @@ type EstadoAuth = {
   cargando: boolean;
   error: string | null;
 
-  iniciarSesion: (identificador: string, contrasena: string) => Promise<boolean>;
+  iniciarSesion: (
+    identificador: string,
+    contrasena: string
+  ) => Promise<boolean>;
   cargarSesion: () => Promise<boolean>;
   cerrarSesion: () => Promise<void>;
 };
@@ -41,6 +45,8 @@ export const useAuth = create<EstadoAuth>((set) => ({
         permisos: me.permisos ?? null,
         cargando: false,
       });
+
+      await registrarPushTokenEnApi();
 
       return true;
     } catch (e: any) {
