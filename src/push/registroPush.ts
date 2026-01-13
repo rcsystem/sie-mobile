@@ -25,10 +25,13 @@ export async function registrarPushTokenEnApi() {
     });
   }
 
-  await clienteApi.post("/api/push-token", {
+  await clienteApi.post("/push-token", {
     token,
     platform: Platform.OS,
   });
+
+  const expoToken = (await Notifications.getExpoPushTokenAsync()).data;
+  console.log("✅ ExpoPushToken:", expoToken);
 
   return token;
 }
