@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import { clienteApi } from "../../api/cliente";
 import { useAuth } from "../../store/useAuth";
+import { meApi } from "../../api/auth";
 import { listarTiposPermiso, listarTurnos } from "../../api/catalogos";
 
 type Movimiento = "ENTRADA" | "SALIDA" | "ENTRADA_SALIDA" | "INASISTENCIA";
@@ -53,6 +54,17 @@ function dmy(d: Date) {
 export default function PermisoCrearScreen({ navigation }: any) {
   const { usuario } = useAuth();
 
+  function extraerTypeEmploye(origen: any): number {
+    const n = Number(
+      origen?.typeEmploye ??
+        origen?.type_employe ??
+        origen?.type_employee ??
+        origen?.type_of_employee ??
+        0,
+    );
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
   const scrollRef = useRef<ScrollView>(null);
 
   // =========================
@@ -72,7 +84,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
         setCargandoTipos(true);
         setErrorTipos(null);
 
-        const lista = await listarTiposPermiso(controller.signal);
+       const lista = await listarTurnos(typeEmploye, controller.signal);
 
         const normalizada = lista.map((t) => ({
           id: t.id as TipoPermiso,
@@ -96,16 +108,56 @@ export default function PermisoCrearScreen({ navigation }: any) {
   }, []);
 
   // =========================
-  // 2) TURNOS (API)
+  // 2) PERFIL (/me) -> typeEmploye
   // =========================
-  // El backend usa type_of_employee. En algunos stores puede venir como type_employe, etc.
-  const typeEmploye = Number(
-    usuario?.typeEmploye ??
-      usuario?.type_employe ??
-      usuario?.type_employee ??
-      usuario?.type_of_employee ??
-      0,
+  const [typeEmploye, setTypeEmploye] = useState<number>(
+    extraerTypeEmploye(usuario),
   );
+  const [cargandoMe, setCargandoMe] = useState<boolean>(false);
+  const [errorMe, setErrorMe] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Si ya viene del store, úsalo
+    const desdeStore = extraerTypeEmploye(usuario);
+    if (desdeStore) {
+      setTypeEmploye(desdeStore);
+      setErrorMe(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        setCargandoMe(true);
+        setErrorMe(null);
+
+        const res = await meApi();
+        // backend puede responder {usuario: {...}} o {data: {...}}
+        const perfil = (res as any)?.usuario ?? (res as any)?.data ?? res;
+        const desdeMe = extraerTypeEmploye(perfil);
+
+        if (!desdeMe) {
+          setTypeEmploye(0);
+          setErrorMe("No se pudo determinar el tipo de empleado desde /me.");
+          return;
+        }
+
+        setTypeEmploye(desdeMe);
+      } catch (e: any) {
+        setTypeEmploye(0);
+        setErrorMe(e?.response?.data?.message || "No se pudo cargar /me");
+      } finally {
+        setCargandoMe(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [usuario]);
+
+  // =========================
+  // 3) TURNOS (API)
+  // =========================
 
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [cargandoTurnos, setCargandoTurnos] = useState(false);
@@ -131,8 +183,9 @@ export default function PermisoCrearScreen({ navigation }: any) {
 
         const lista = await listarTurnos(typeEmploye, controller.signal);
 
-        // listarTurnos ya regresa {id, nombre}
         setTurnos(lista as Turno[]);
+        console.log("typeEmploye =>", typeEmploye);
+
         setTurnoId(0);
       } catch (_e: any) {
         setErrorTurnos("No se pudo cargar el catálogo de turnos");
@@ -294,6 +347,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
 
   const puedeCrear =
     !cargando &&
+    !cargandoMe &&
     !cargandoTipos &&
     tipos.length > 0 &&
     !cargandoTurnos &&
@@ -359,6 +413,22 @@ export default function PermisoCrearScreen({ navigation }: any) {
 
         {/* Turno */}
         <Text style={{ fontWeight: "700", marginBottom: 6 }}>Turno</Text>
+
+        {cargandoMe ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 12,
+            }}
+          >
+            <ActivityIndicator />
+            <Text style={{ color: "#6B7280" }}>Cargando perfil…</Text>
+          </View>
+        ) : errorMe ? (
+          <Text style={{ color: "#a10606", marginBottom: 12 }}>{errorMe}</Text>
+        ) : null}
 
         {cargandoTurnos ? (
           <View
