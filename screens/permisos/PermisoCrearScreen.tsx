@@ -184,7 +184,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
         const lista = await listarTurnos(typeEmploye, controller.signal);
 
         setTurnos(lista as Turno[]);
-        console.log("typeEmploye =>", typeEmploye);
+        console.log("typeEmploye =>", lista);
 
         setTurnoId(0);
       } catch (_e: any) {
@@ -401,7 +401,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
         >
           <Picker
             enabled={!cargandoTipos && tipos.length > 0}
-            selectedValue={tipoPermiso}
+            selectedValue={0}
             onValueChange={(v) => setTipoPermiso(Number(v) as TipoPermiso)}
           >
             <Picker.Item label="Selecciona..." value={0} />
