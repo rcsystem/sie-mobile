@@ -16,8 +16,9 @@ export default function AppNavigator() {
   const { usuario, cargarSesion, cargando } = useAuth();
 
   useEffect(() => {
+    // Cargar token/refresh desde SecureStore y, si existe token, traer /me
     void cargarSesion();
-  }, []);
+  }, [cargarSesion]);
 
   if (cargando) {
     return (

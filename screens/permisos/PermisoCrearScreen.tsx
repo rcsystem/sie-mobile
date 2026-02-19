@@ -16,7 +16,7 @@ import { useAuth } from "../../store/useAuth";
 import { meApi } from "../../api/auth";
 import { listarTiposPermiso, listarTurnos } from "../../api/catalogos";
 
-type Movimiento = "ENTRADA" | "SALIDA" | "ENTRADA_SALIDA" | "INASISTENCIA";
+type Movimiento = "ENTRADA" | "SALIDA" | "SALIDA_ENTRADA" | "INASISTENCIA";
 type Turno = { id: number; nombre: string };
 
 // ---- helpers ----
@@ -84,7 +84,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
         setCargandoTipos(true);
         setErrorTipos(null);
 
-       const lista = await listarTurnos(typeEmploye, controller.signal);
+        const lista = await listarTiposPermiso(controller.signal); // ✅
 
         const normalizada = lista.map((t) => ({
           id: t.id as TipoPermiso,
@@ -285,11 +285,12 @@ export default function PermisoCrearScreen({ navigation }: any) {
         payload.permiso_dia_salida = dmy(fechaSalida);
       }
 
-      if (movimiento === "ENTRADA_SALIDA") {
-        payload.permiso_autoriza_entrada = hi(horaEntrada);
-        payload.permiso_dia_entrada = dmy(fechaEntrada);
+      if (movimiento === "SALIDA_ENTRADA") {
         payload.permiso_autoriza_salida = hi(horaSalida);
         payload.permiso_dia_salida = dmy(fechaSalida);
+
+        payload.permiso_autoriza_entrada = hi(horaEntrada);
+        payload.permiso_dia_entrada = dmy(fechaEntrada);
       }
 
       await clienteApi.post("/permisos", payload);
@@ -401,7 +402,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
         >
           <Picker
             enabled={!cargandoTipos && tipos.length > 0}
-            selectedValue={0}
+            selectedValue={tipoPermiso}
             onValueChange={(v) => setTipoPermiso(Number(v) as TipoPermiso)}
           >
             <Picker.Item label="Selecciona..." value={0} />
@@ -485,8 +486,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
           >
             <Picker.Item label="Entrada" value="ENTRADA" />
             <Picker.Item label="Salida" value="SALIDA" />
-            <Picker.Item label="Entrada → Salida" value="ENTRADA_SALIDA" />
-            <Picker.Item label="Inasistencia (Del → Al)" value="INASISTENCIA" />
+            <Picker.Item label="Salida → Entrada" value="SALIDA_ENTRADA" />
           </Picker>
         </View>
 
@@ -546,7 +546,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
           </View>
         ) : (
           <View style={{ gap: 10, marginBottom: 12 }}>
-            {(movimiento === "ENTRADA" || movimiento === "ENTRADA_SALIDA") && (
+            {(movimiento === "ENTRADA" || movimiento === "SALIDA_ENTRADA") && (
               <>
                 <Text style={{ fontWeight: "700" }}>Entrada</Text>
                 <TouchableOpacity
@@ -575,7 +575,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
               </>
             )}
 
-            {(movimiento === "SALIDA" || movimiento === "ENTRADA_SALIDA") && (
+            {(movimiento === "SALIDA" || movimiento === "SALIDA_ENTRADA") && (
               <>
                 <Text style={{ fontWeight: "700" }}>Salida</Text>
                 <TouchableOpacity

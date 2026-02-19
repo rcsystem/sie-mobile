@@ -22,14 +22,23 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.rcsystem.sieapp"
+      "package": "com.rcsystem.sieapp",
+      "googleServicesFile": "./google-services.json"
+      
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+    "expo-notifications",
+    {
+      "icon": "./assets/icon-inval.png",
+      "color": "#a10606"
+    }
+  ]
     ],
     "androidStatusBar": {
       "backgroundColor": "#a10606",

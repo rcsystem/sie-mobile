@@ -15,7 +15,7 @@ import { clienteApi } from "../../api/cliente";
 import { useAuth } from "../../store/useAuth";
 import { listarTiposPermiso, listarTurnos } from "../../api/catalogos";
 
-type Movimiento = "ENTRADA" | "SALIDA" | "ENTRADA_SALIDA" | "INASISTENCIA";
+type Movimiento = "ENTRADA" | "SALIDA" | "SALIDA_ENTRADA" | "INASISTENCIA";
 type Turno = { id: number; nombre: string };
 
 // ---- helpers ----
@@ -81,9 +81,9 @@ export default function PermisoCrearScreen({ navigation }: any) {
 
         setTipos(normalizada);
 
-        if (normalizada.length > 0) {
+        /* if (normalizada.length > 0) {
           setTipoPermiso((prev) => (prev ? prev : normalizada[0].id));
-        }
+        } */
       } catch (_e: any) {
         setErrorTipos("No se pudo cargar el catálogo de tipos");
         setTipos([]);
@@ -179,6 +179,18 @@ export default function PermisoCrearScreen({ navigation }: any) {
     if (!tipoPermiso) return "Selecciona el tipo de permiso.";
     if (!turnoId) return "Selecciona el turno.";
 
+    if (movimiento === "SALIDA_ENTRADA") {
+      if (ymd(fechaEntrada) !== ymd(fechaSalida)) {
+        return "En Salida → Entrada debe ser el mismo día.";
+      }
+      const mins =
+        horaEntrada.getHours() * 60 +
+        horaEntrada.getMinutes() -
+        (horaSalida.getHours() * 60 + horaSalida.getMinutes());
+      if (mins <= 0) return "La entrada debe ser después de la salida.";
+      if (mins > 180) return "Máximo 3 horas entre salida y entrada.";
+    }
+
     const obs = observaciones.trim();
     if (!obs) return "Agrega observaciones (motivo).";
 
@@ -232,18 +244,37 @@ export default function PermisoCrearScreen({ navigation }: any) {
         payload.permiso_dia_salida = dmy(fechaSalida);
       }
 
-      if (movimiento === "ENTRADA_SALIDA") {
-        payload.permiso_autoriza_entrada = hi(horaEntrada);
-        payload.permiso_dia_entrada = dmy(fechaEntrada);
+      if (movimiento === "SALIDA_ENTRADA") {
+        // Backend espera SALIDA (más temprano) y luego ENTRADA (más tarde)
         payload.permiso_autoriza_salida = hi(horaSalida);
         payload.permiso_dia_salida = dmy(fechaSalida);
+
+        payload.permiso_autoriza_entrada = hi(horaEntrada);
+        payload.permiso_dia_entrada = dmy(fechaEntrada);
       }
 
       await clienteApi.post("/permisos", payload);
 
       navigation.goBack();
     } catch (e: any) {
-      setError(e?.response?.data?.message || "No se pudo crear el permiso");
+      const status = e?.response?.status;
+      const data = e?.response?.data;
+
+      console.log("POST /permisos status:", status);
+      console.log("POST /permisos typeof data:", typeof data);
+
+      if (typeof data === "string") {
+        console.log("POST /permisos data (string head):", data.slice(0, 800));
+      } else {
+        console.log("POST /permisos data (obj):", data);
+      }
+
+      setError(
+        (data && data.message) ||
+          (typeof data === "string"
+            ? "Error servidor (HTML)"
+            : "No se pudo crear el permiso"),
+      );
     } finally {
       setCargando(false);
     }
@@ -279,6 +310,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
         break;
       case "fechaSalida":
         setFechaSalida(selected);
+        if (movimiento === "SALIDA_ENTRADA") setFechaEntrada(selected);
         break;
       case "horaSalida":
         setHoraSalida(selected);
@@ -415,8 +447,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
           >
             <Picker.Item label="Entrada" value="ENTRADA" />
             <Picker.Item label="Salida" value="SALIDA" />
-            <Picker.Item label="Entrada → Salida" value="ENTRADA_SALIDA" />
-            <Picker.Item label="Inasistencia (Del → Al)" value="INASISTENCIA" />
+            <Picker.Item label="Salida → Entrada" value="SALIDA_ENTRADA" />
           </Picker>
         </View>
 
@@ -476,36 +507,7 @@ export default function PermisoCrearScreen({ navigation }: any) {
           </View>
         ) : (
           <View style={{ gap: 10, marginBottom: 12 }}>
-            {(movimiento === "ENTRADA" || movimiento === "ENTRADA_SALIDA") && (
-              <>
-                <Text style={{ fontWeight: "700" }}>Entrada</Text>
-                <TouchableOpacity
-                  onPress={() => mostrarPicker("fechaEntrada", "date")}
-                  style={{
-                    padding: 14,
-                    borderWidth: 1,
-                    borderColor: "#ddd",
-                    borderRadius: 10,
-                  }}
-                >
-                  <Text>Fecha entrada: {ymd(fechaEntrada)}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => mostrarPicker("horaEntrada", "time")}
-                  style={{
-                    padding: 14,
-                    borderWidth: 1,
-                    borderColor: "#ddd",
-                    borderRadius: 10,
-                  }}
-                >
-                  <Text>Hora entrada: {hi(horaEntrada)}</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {(movimiento === "SALIDA" || movimiento === "ENTRADA_SALIDA") && (
+            {(movimiento === "SALIDA" || movimiento === "SALIDA_ENTRADA") && (
               <>
                 <Text style={{ fontWeight: "700" }}>Salida</Text>
                 <TouchableOpacity
@@ -530,6 +532,35 @@ export default function PermisoCrearScreen({ navigation }: any) {
                   }}
                 >
                   <Text>Hora salida: {hi(horaSalida)}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            {(movimiento === "ENTRADA" || movimiento === "SALIDA_ENTRADA") && (
+              <>
+                <Text style={{ fontWeight: "700" }}>Entrada</Text>
+                <TouchableOpacity
+                  onPress={() => mostrarPicker("fechaEntrada", "date")}
+                  style={{
+                    padding: 14,
+                    borderWidth: 1,
+                    borderColor: "#ddd",
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text>Fecha entrada: {ymd(fechaEntrada)}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => mostrarPicker("horaEntrada", "time")}
+                  style={{
+                    padding: 14,
+                    borderWidth: 1,
+                    borderColor: "#ddd",
+                    borderRadius: 10,
+                  }}
+                >
+                  <Text>Hora entrada: {hi(horaEntrada)}</Text>
                 </TouchableOpacity>
               </>
             )}

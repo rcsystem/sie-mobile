@@ -1,99 +1,122 @@
 import { create } from "zustand";
-import * as SecureStore from "expo-secure-store";
 import { loginApi, meApi } from "../api/auth";
+import { guardarItem, leerItem, borrarItem } from "../../utils/almacenSeguro";
 import { registrarPushTokenEnApi } from "../push/registroPush";
 
 type EstadoAuth = {
+  token: string | null;
+  refreshToken: string | null;
   usuario: any | null;
-  permisos: any | null;
   cargando: boolean;
   error: string | null;
 
-  iniciarSesion: (
-    identificador: string,
-    contrasena: string
-  ) => Promise<boolean>;
-  cargarSesion: () => Promise<boolean>;
+  cargarSesion: () => Promise<void>;
+  iniciarSesion: (identificador: string, contrasena: string) => Promise<void>;
   cerrarSesion: () => Promise<void>;
 };
 
-export const useAuth = create<EstadoAuth>((set) => ({
+export const useAuth = create<EstadoAuth>((set, get) => ({
+  token: null,
+  refreshToken: null,
   usuario: null,
-  permisos: null,
   cargando: false,
   error: null,
 
-  iniciarSesion: async (identificador, contrasena) => {
-    set({ cargando: true, error: null });
-
+  // ✅ Se llama al arrancar la app (AppNavigator)
+  cargarSesion: async () => {
     try {
-      // ✅ tu API regresa access_token, refresh_token, expires_in
-      const data = await loginApi(identificador, contrasena);
+      set({ cargando: true, error: null });
 
-      await SecureStore.setItemAsync("access_token", data.access_token);
-      await SecureStore.setItemAsync("refresh_token", data.refresh_token);
-      await SecureStore.setItemAsync(
-        "expires_at",
-        String(Date.now() + data.expires_in * 1000)
-      );
+      const token = await leerItem("access_token");
+      const refreshToken = await leerItem("refresh_token");
 
-      // ✅ ahora /me sí llevará Authorization porque el interceptor ya encontrará access_token
-      const me = await meApi();
+      if (!token) {
+        set({
+          token: null,
+          refreshToken: refreshToken ?? null,
+          usuario: null,
+          cargando: false,
+        });
+        return;
+      }
 
-      set({
-        usuario: me.usuario,
-        permisos: me.permisos ?? null,
-        cargando: false,
+      // Guardamos en estado (axios interceptor también lo tomará de SecureStore)
+      set({ token, refreshToken: refreshToken ?? null });
+
+      // Traer perfil
+      const res = await meApi();
+      const perfil = (res as any)?.usuario ?? (res as any)?.data ?? res;
+      set({ usuario: perfil, cargando: false });
+
+      // Push (opcional)
+      registrarPushTokenEnApi().catch((e) => {
+        console.log("Push token falló (ignorado):", e?.message || e);
       });
-
-      await registrarPushTokenEnApi();
-
-      return true;
     } catch (e: any) {
-      const msg = e?.response?.data?.message || "No se pudo iniciar sesión";
-      set({ error: msg, cargando: false });
-      return false;
+      set({
+        token: null,
+        refreshToken: null,
+        usuario: null,
+        cargando: false,
+        error:
+          e?.response?.data?.message ||
+          e?.message ||
+          "No se pudo cargar sesión",
+      });
     }
   },
 
-  cargarSesion: async () => {
-    set({ cargando: true, error: null });
-
-    const access = await SecureStore.getItemAsync("access_token");
-    const refresh = await SecureStore.getItemAsync("refresh_token");
-
-    // si no hay refresh, la sesión no existe
-    if (!refresh) {
-      set({ cargando: false });
-      return false;
-    }
-
+  iniciarSesion: async (identificador, contrasena) => {
     try {
-      // si access está expirado, el interceptor hará refresh automáticamente
-      const me = await meApi();
+      set({ cargando: true, error: null });
+
+      const data = await loginApi(identificador, contrasena);
+
+      // El backend debe regresar access_token + refresh_token
+      if (!data?.access_token) {
+        throw new Error("El backend no regresó access_token");
+      }
 
       set({
-        usuario: me.usuario,
-        permisos: me.permisos ?? null,
-        cargando: false,
+        token: data.access_token,
+        refreshToken: data.refresh_token ?? null,
       });
 
-      return true;
-    } catch {
-      // limpia todo si ya no sirve
-      await SecureStore.deleteItemAsync("access_token");
-      await SecureStore.deleteItemAsync("refresh_token");
-      await SecureStore.deleteItemAsync("expires_at");
-      set({ usuario: null, permisos: null, cargando: false });
-      return false;
+      await guardarItem("access_token", data.access_token);
+      if (data.refresh_token)
+        await guardarItem("refresh_token", data.refresh_token);
+
+      const res = await meApi();
+      const perfil = (res as any)?.usuario ?? (res as any)?.data ?? res;
+      set({ usuario: perfil, cargando: false });
+
+      registrarPushTokenEnApi().catch((e) => {
+        console.log("Push token falló (ignorado):", e?.message || e);
+      });
+    } catch (e: any) {
+      // Importantísimo: deja el estado limpio
+      set({
+        token: null,
+        refreshToken: null,
+        usuario: null,
+        cargando: false,
+        error:
+          e?.response?.data?.message ||
+          e?.message ||
+          "No se pudo iniciar sesión",
+      });
     }
   },
 
   cerrarSesion: async () => {
-    // (opcional) también llamar /logout con refresh_token para revocar en server
-    await SecureStore.deleteItemAsync("access_token");
-    await SecureStore.deleteItemAsync("refresh_token");
-    await SecureStore.deleteItemAsync("expires_at");
-    set({ usuario: null, permisos: null, error: null });
+    set({
+      token: null,
+      refreshToken: null,
+      usuario: null,
+      error: null,
+      cargando: false,
+    });
+    await borrarItem("access_token");
+    await borrarItem("refresh_token");
   },
 }));

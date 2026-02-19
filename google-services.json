@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "825106583137",
+    "project_id": "app-sie-2410",
+    "storage_bucket": "app-sie-2410.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:825106583137:android:76ca71111e1aa6db9de420",
+        "android_client_info": {
+          "package_name": "com.rcsystem.sieapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXXvRIKpaVk0I7rHj_EzMjaMDWlnrbM8E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:825106583137:android:0bbf4aab4b2edb2e9de420",
+        "android_client_info": {
+          "package_name": "com.walworth.sieapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXXvRIKpaVk0I7rHj_EzMjaMDWlnrbM8E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

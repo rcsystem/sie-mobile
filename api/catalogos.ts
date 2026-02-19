@@ -6,8 +6,6 @@ export type TipoPermisoApi = {
 };
 
 export type TurnoApi = {
-  // Formato del backend (CatalogosController::Horarios)
-  // SELECT id AS turn, name_turn
   id: number;
   nombre: string;
 };
@@ -23,6 +21,8 @@ export async function listarTiposPermiso(signal?: AbortSignal) {
 }
 
 /// ✅ Normaliza lo que regresa el backend: { turn, name_turn } -> { id, nombre }
+
+
 export async function listarTurnos(typeEmploye: number, signal?: AbortSignal) {
   if (!typeEmploye || Number(typeEmploye) <= 0) return [];
 
@@ -36,6 +36,7 @@ export async function listarTurnos(typeEmploye: number, signal?: AbortSignal) {
 
   return lista.map((t: any) => ({
     id: Number(t.turn),
-    nombre: String(t.name_turn),
+    nombre: String(t.name_turn ?? ""), // evita "undefined"
   })) as TurnoApi[];
 }
+
